@@ -4,6 +4,8 @@ FROM ubuntu:18.04
 # Update the base image
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get -y upgrade && apt-get -y dist-upgrade
 
+
+
 # Setup PHP5
 RUN DEBIAN_FRONTEND=noninteractive apt-get -y install software-properties-common
 RUN DEBIAN_FRONTEND=noninteractive add-apt-repository ppa:ondrej/php
@@ -17,6 +19,9 @@ RUN sed -i 's/short_open_tag = Off/short_open_tag = On/g' /etc/php/7.2/apache2/p
 RUN sed -i 's/short_open_tag = Off/short_open_tag = On/g' /etc/php/7.2/cli/php.ini
 RUN sed -i 's/display_errors = On/display_errors = Off/g' /etc/php/7.2/apache2/php.ini
 RUN sed -i 's/error_reporting = E_ALL \& ~E_DEPRECATED \& ~E_STRICT/error_reporting = E_ALL \& ~E_NOTICE \& ~E_STRICT \& ~E_DEPRECATED/g' /etc/php/7.2/apache2/php.ini
+
+# Add zip toolbox
+RUN DEBIAN_FRONTEND=noninteractive apt-get -y install zip unzip php-zip
 
 # Setup igbinary
 RUN DEBIAN_FRONTEND=noninteractive pecl install igbinary
