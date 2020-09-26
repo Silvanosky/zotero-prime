@@ -164,7 +164,7 @@ class Zotero_DB {
 					// Use a lower connection timeout for read replicas
 					if ($connInfo['host'] != $writerAddress) {
 						$connInfo['driver_options'] = [
-							'MYSQLI_OPT_CONNECT_TIMEOUT' => 2
+							'MYSQLI_OPT_CONNECT_TIMEOUT' => 3
 						];
 					}
 					
@@ -1171,11 +1171,16 @@ class Zotero_DB {
 		}
 	}
 	
-	public static function profileEnd($id="", $appendRandomID=true) {
+	public static function profileEnd($id="", $appendRandomID = true, $url = "") {
 		$instance = self::getInstance();
 		$instance->profilerEnabled = false;
 		
 		$str = "";
+		
+		if ($url) {
+			$str .= "URL: $url\n\n";
+		}
+		
 		$first = true;
 		// TODO: Support replica connections
 		foreach ($instance->connections as $shardID => $conn) {

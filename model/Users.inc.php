@@ -163,7 +163,7 @@ class Zotero_Users {
 			return $username;
 		}
 		
-		if (!$skipAutoAdd) {
+		if (!$skipAutoAdd && !self::isDeletedUser($userID)) {
 			if (!self::exists($userID)) {
 				self::addFromWWW($userID);
 			}
@@ -174,8 +174,10 @@ class Zotero_Users {
 		
 		$sql = "SELECT username FROM users WHERE userID=?";
 		$username = Zotero_DB::valueQuery($sql, $userID);
+		// Fall back to WWW. Deleting accounts currently deletes the dataserver user, so we need to
+		// get the username from WWW.
 		if (!$username) {
-			throw new Exception("Username for userID $userID not found", Z_ERROR_USER_NOT_FOUND);
+			$username = self::getUsernameFromWWW($userID);
 		}
 		
 		self::$usernamesByID[$userID] = $username;
@@ -281,14 +283,18 @@ class Zotero_Users {
 		if (self::exists($userID)) {
 			throw new Exception("User $userID already exists");
 		}
-		// Throws an error if user not found
+		if (self::isDeletedUser($userID)) {
+			throw new Exception("User $userID was deleted", Z_ERROR_USER_NOT_FOUND);
+		}
 		$username = self::getUsernameFromWWW($userID);
 		self::add($userID, $username);
 	}
 	
 	
 	public static function updateFromWWW($userID) {
-		// Throws an error if user not found
+		if (self::isDeletedUser($userID)) {
+			throw new Exception("User $userID was deleted", Z_ERROR_USER_NOT_FOUND);
+		}
 		$username = self::getUsernameFromWWW($userID);
 		self::updateUsername($userID, $username);
 	}
@@ -415,6 +421,35 @@ class Zotero_Users {
 	}
 	
 	
+	public static function isDeletedUser($userID) {
+		if (!$userID) {
+			throw new Exception("Invalid user");
+		}
+		
+		$cacheKey = "deletedUser_" . $userID;
+		$valid = Z_Core::$MC->get($cacheKey);
+		if ($valid === 1) {
+			return true;
+		}
+		else if ($valid === 0) {
+			return false;
+		}
+		
+		$sql = "SELECT COUNT(*) FROM users WHERE userID=? AND role = 'deleted'";
+		try {
+			$deleted = Zotero_WWW_DB_2::valueQuery($sql, $userID);
+		}
+		catch (Exception $e) {
+			Z_Core::logError("WARNING: $e -- retrying on primary");
+			$deleted = Zotero_WWW_DB_1::valueQuery($sql, $userID);
+		}
+		
+		Z_Core::$MC->set($cacheKey, $deleted ? 1 : 0);
+		
+		return $deleted;
+	}
+	
+	
 	public static function isValidUser($userID) {
 		if (!$userID) {
 			throw new Exception("Invalid user");
@@ -497,6 +532,14 @@ class Zotero_Users {
 		
 		Zotero_DB::beginTransaction();
 		
+		// No FK constraint on keyAccessLog
+		$keyIDs = Zotero_DB::columnQuery("SELECT keyID FROM `keys` WHERE userID=?", $userID);
+		if ($keyIDs) {
+			Zotero_DB::query("DELETE FROM keyAccessLog WHERE keyID IN (" . implode(",", $keyIDs) . ")");
+		}
+		
+		Zotero_DB::query("DELETE FROM storageUploadQueue WHERE userID=?", $userID);
+		
 		$libraryID = self::getLibraryIDFromUserID($userID, 'publications');
 		if ($libraryID) {
 			Zotero_Libraries::clearAllData($libraryID);
@@ -504,11 +547,6 @@ class Zotero_Users {
 		
 		$libraryID = self::getLibraryIDFromUserID($userID);
 		Zotero_Libraries::clearAllData($libraryID);
-		
-		// TODO: Better handling of locked out sessions elsewhere
-		$sql = "UPDATE sessions SET timestamp='0000-00-00 00:00:00',
-					exclusive=0 WHERE userID=? AND exclusive=1";
-		Zotero_DB::query($sql, $userID);
 		
 		Zotero_DB::commit();
 	}
@@ -521,7 +559,7 @@ class Zotero_Users {
 		
 		$username = Zotero_Users::getUsername($userID, true);
 		
-		$sql = "SELECT Deleted FROM GDN_User WHERE UserID=?";
+		$sql = "SELECT role='deleted' FROM users WHERE userID=?";
 		try {
 			$deleted = Zotero_WWW_DB_2::valueQuery($sql, $userID);
 		}
@@ -533,10 +571,22 @@ class Zotero_Users {
 			throw new Exception("User '$username' has not been deleted in user table");
 		}
 		
+		// Check that user still exists
+		if (!Zotero_DB::valueQuery("SELECT COUNT(*) FROM users WHERE userID=?", $userID)) {
+			return false;
+		}
+		
 		Zotero_DB::beginTransaction();
 		
-		if (Zotero_Groups::getUserOwnedGroups($userID)) {
-			throw new Exception("Cannot delete user '$username' with owned groups");
+		// Delete owned groups without members. Owned groups with members shouldn't exist for
+		// deleted users.
+		$ownedGroups = Zotero_Groups::getUserOwnedGroups($userID);
+		foreach ($ownedGroups as $groupID) {
+			$group = Zotero_Groups::get($groupID);
+			if (sizeOf($group->getUsers()) > 1) {
+				throw new Exception("Cannot delete user '$username' with owned group $groupID with other members");
+			}
+			$group->erase();
 		}
 		
 		// Remove user from any groups they're a member of
@@ -552,7 +602,7 @@ class Zotero_Users {
 		// Remove all data
 		Zotero_Users::clearAllData($userID);
 		
-		// Remove user publications library
+		// Remove old user publications library
 		$libraryID = self::getLibraryIDFromUserID($userID, 'publications');
 		if ($libraryID) {
 			$shardID = Zotero_Shards::getByLibraryID($libraryID);
@@ -567,6 +617,10 @@ class Zotero_Users {
 		Zotero_DB::query("DELETE FROM libraries WHERE libraryID=?", $libraryID);
 		
 		Zotero_DB::commit();
+		
+		Z_Core::$MC->delete('userExists_' . $userID);
+		
+		return true;
 	}
 	
 	
