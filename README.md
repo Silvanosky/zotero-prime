@@ -50,34 +50,4 @@ $ cd ..
 
 ## Client installation
 
-### Dependencies and source code
-
-For [m|l|w]: m=Mac, w=Windows, l=Linux
-
-*Run*:
-```bash
-$ cd client
-$ ./config.sh
-$ cd zotero-client
-$ npm install
-$ npm run build
-$ cd ../zotero-standalone-build
-$ ./fetch_xulrunner.sh -p [m|l|w]
-$ ./fetch_pdftools
-$ ./scripts/dir_build -p [m|l|w]
-```
-
-### First usage
-
-*Run*:
-```bash
-$ ./staging/Zotero_VERSION/zotero(.exe)
-```
-
-*Connect with the default user and password*:
-
-| Name          | Login                    | Password           |
-| ------------- | ------------------------ | ------------------ |
-| Zotero        | admin                    | admin              |
-
-![Sync](doc/sync.png)
+TO BE POPULATED (the client will be available from another repository)
