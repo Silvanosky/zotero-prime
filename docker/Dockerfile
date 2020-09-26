@@ -49,6 +49,7 @@ RUN DEBIAN_FRONTEND=noninteractive pip install awscli
 
 # Setup Apache2
 RUN a2enmod rewrite
+RUN a2enmod headers
 
 # Enable the new virtualhost
 COPY zotero.conf /etc/apache2/sites-available/
