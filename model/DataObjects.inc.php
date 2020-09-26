@@ -365,12 +365,14 @@ trait Zotero_DataObjects {
 			$i++;
 		}
 		
+		$report = $results->generateReport();
+		
 		if ($loggableErrors) {
 			$text = mb_substr(Zotero_Utilities::formatJSON($json), 0, 100000);
-			Z_Core::reportErrors($loggableErrors, $text);
+			Z_Core::reportErrors($loggableErrors, $text . "\n\n" . Zotero_Utilities::formatJSON($report));
 		}
 		
-		return $results->generateReport();
+		return $report;
 	}
 	
 	
@@ -421,38 +423,6 @@ trait Zotero_DataObjects {
 				. Zotero_API::$$maxWriteKey
 				. " $objectTypePlural at a time", Z_ERROR_UPLOAD_TOO_LARGE);
 		}
-	}
-	
-	
-	public static function countUpdated($userID, $timestamp, $deletedCheckLimit=false) {
-		$table = self::$table;
-		$id = self::$idColumn;
-		$type = self::$objectType;
-		$types = self::$objectTypePlural;
-		
-		// First, see what libraries we actually need to check
-		
-		Zotero_DB::beginTransaction();
-		
-		// All libraries with update times >= $timestamp
-		$updateTimes = Zotero_Libraries::getUserLibraryUpdateTimes($userID);
-		$updatedLibraryIDs = array();
-		foreach ($updateTimes as $libraryID=>$lastUpdated) {
-			if ($lastUpdated >= $timestamp) {
-				$updatedLibraryIDs[] = $libraryID;
-			}
-		}
-		
-		$count = self::getUpdated($userID, $timestamp, $updatedLibraryIDs, true);
-		
-		// Make sure we really have fewer than 5
-		if ($deletedCheckLimit < 5) {
-			$count += Zotero_Sync::countDeletedObjectKeys($userID, $timestamp, $updatedLibraryIDs);
-		}
-		
-		Zotero_DB::commit();
-		
-		return $count;
 	}
 	
 	
@@ -653,7 +623,10 @@ trait Zotero_DataObjects {
 			// deleting subcollections first, starting with the most recent, which isn't foolproof
 			// but will probably almost always do the trick.
 			if ($type == 'collection'
-					&& strpos($e->getMessage(), "Cannot delete or update a parent row") !== false) {
+					// Newer MySQL
+					&& (strpos($e->getMessage(), "Foreign key cascade delete/update exceeds max depth")
+					// Older MySQL
+					|| strpos($e->getMessage(), "Cannot delete or update a parent row") !== false)) {
 				$deleted = self::deleteSubcollections($libraryID, $key);
 			}
 			else {
@@ -696,41 +669,6 @@ trait Zotero_DataObjects {
 		}
 		
 		Zotero_DB::commit();
-	}
-	
-	
-	/**
-	 * @param	SimpleXMLElement	$xml		Data necessary for delete as SimpleXML element
-	 * @return	void
-	 */
-	public static function deleteFromXML(SimpleXMLElement $xml, $userID) {
-		$parents = array();
-		
-		foreach ($xml->children() as $obj) {
-			$libraryID = (int) $obj['libraryID'];
-			$key = (string) $obj['key'];
-			
-			if ($userID && !Zotero_Libraries::userCanEdit($libraryID, $userID)) {
-				throw new Exception("Cannot edit " . self::$objectType
-					. " in library $libraryID", Z_ERROR_LIBRARY_ACCESS_DENIED);
-			}
-			
-			if ($obj->getName() == 'item') {
-				$item = Zotero_Items::getByLibraryAndKey($libraryID, $key);
-				if (!$item) {
-					continue;
-				}
-				if (!$item->getSource()) {
-					$parents[] = array('libraryID' => $libraryID, 'key' => $key);
-					continue;
-				}
-			}
-			self::delete($libraryID, $key);
-		}
-		
-		foreach ($parents as $obj) {
-			self::delete($obj['libraryID'], $obj['key']);
-		}
 	}
 	
 	

@@ -34,18 +34,18 @@ class ParamsTests extends APITests {
 	private static $itemKeys = array();
 	private static $searchKeys = array();
 	
-	public static function setUpBeforeClass() {
+	public static function setUpBeforeClass(): void {
 		parent::setUpBeforeClass();
 		API::userClear(self::$config['userID']);
 	}
 	
-	public static function tearDownAfterClass() {
+	public static function tearDownAfterClass(): void {
 		parent::tearDownAfterClass();
 		API::userClear(self::$config['userID']);
 	}
 	
 	
-	public function setUp() {
+	public function setUp(): void {
 		parent::setUp();
 		API::userClear(self::$config['userID']);
 	}
@@ -235,15 +235,15 @@ class ParamsTests extends APITests {
 		case 'tag':
 			API::createItem("book", [
 				'tags' => [
-					'a',
-					'b'
+					[ 'tag' => 'a' ],
+					[ 'tag' => 'b' ]
 				]
 			], $this);
 			API::createItem("book", [
 				'tags' => [
-					'c',
-					'd',
-					'e'
+					[ 'tag' => 'c' ],
+					[ 'tag' => 'd' ],
+					[ 'tag' => 'e' ]
 				]
 			], $this);
 			break;
@@ -394,6 +394,34 @@ class ParamsTests extends APITests {
 	}
 	
 	
+	public function test_should_include_since_parameter_in_next_link() {
+		$totalResults = 6;
+		
+		$since = API::createItem("book", false, $this, 'json')['version'];
+		
+		for ($i=0; $i < $totalResults; $i++) {
+			API::createItem("book", false, $this, 'key');
+		}
+		
+		$response = API::userGet(
+			self::$config['userID'],
+			"items?limit=5&since=$since"
+		);
+		
+		$json = API::getJSONFromResponse($response);
+		$linkParams = self::parseLinkHeader($response->getHeader('Link'))['next']['params'];
+		$this->assertEquals(5, $linkParams['limit']);
+		$this->assertArrayHasKey(
+			'since',
+			$linkParams
+		);
+		
+		$this->assertCount(5, $json);
+		$this->assertNumResults(5, $response);
+		$this->assertTotalResults($totalResults, $response);
+	}
+	
+	
 	// Test disabled because it's slow
 	/*public function testPaginationWithItemKey() {
 		$totalResults = 27;
@@ -485,6 +513,51 @@ class ParamsTests extends APITests {
 		$response = API::userGet(
 			self::$config['userID'],
 			"items?q=" . ($year2 + 1)
+		);
+		$this->assert200($response);
+		$this->assertNumResults(0, $response);
+	}
+	
+	
+	public function test_should_perform_quicksearch_with_multiple_words() {
+		$title1 = "This Is a Great Title";
+		$title2 = "Great, But Is It Better Than This Title?";
+		
+		$keys = [];
+		$keys[] = API::createItem("book", [
+			'title' => $title1
+		], $this, 'key');
+		$keys[] = API::createItem("journalArticle", [
+			'title' => $title2,
+		], $this, 'key');
+		
+		// Search by multiple independent words
+		$q = "better title";
+		$response = API::userGet(
+			self::$config['userID'],
+			"items?q=" . urlencode($q)
+		);
+		$this->assert200($response);
+		$this->assertNumResults(1, $response);
+		$json = API::getJSONFromResponse($response);
+		$this->assertEquals($keys[1], $json[0]['key']);
+		
+		// Search by phrase
+		$q = '"great title"';
+		$response = API::userGet(
+			self::$config['userID'],
+			"items?q=" . urlencode($q)
+		);
+		$this->assert200($response);
+		$this->assertNumResults(1, $response);
+		$json = API::getJSONFromResponse($response);
+		$this->assertEquals($keys[0], $json[0]['key']);
+		
+		// Search by non-matching phrase
+		$q = '"better title"';
+		$response = API::userGet(
+			self::$config['userID'],
+			"items?q=" . urlencode($q)
 		);
 		$this->assert200($response);
 		$this->assertNumResults(0, $response);
