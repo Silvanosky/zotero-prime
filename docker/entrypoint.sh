@@ -17,12 +17,16 @@ export APACHE_LOG_DIR=/var/log/apache2
 # NPM
 cd /var/www/zotero/stream-server && npm install
 cd /var/www/zotero/tinymce-clean-server && npm install
+cd /var/www/zotero/web-library && npm install
 
 # Start Stream server
 cd /var/www/zotero/stream-server && nodejs index.js &
 
 # Start Clean server
 cd /var/www/zotero/tinymce-clean-server && nodejs server.js &
+
+# Start Web client
+cd /var/www/zotero/web-library && npm run start &
 
 # Chown
 chown -R ${RUN_USER}:${RUN_GROUP} /var/log/apache2
