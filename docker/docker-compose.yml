@@ -30,6 +30,7 @@ services:
       - "8080:80"
       - "8081:81"
       - "8082:8082"
+      - "8084:8001"
     volumes:
       - "../:/var/www/zotero:rw"
       - "./config/config.inc.php:/var/www/zotero/include/config/config.inc.php:ro"

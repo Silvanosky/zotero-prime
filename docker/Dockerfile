@@ -1,10 +1,11 @@
 # Use the official Docker Hub Ubuntu 18.04 base image
 FROM ubuntu:18.04
 
+# replace shell with bash so we can source files
+RUN rm /bin/sh && ln -s /bin/bash /bin/sh
+
 # Update the base image
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get -y upgrade && apt-get -y dist-upgrade
-
-
 
 # Setup PHP5
 RUN DEBIAN_FRONTEND=noninteractive apt-get -y install software-properties-common
@@ -44,8 +45,21 @@ RUN ln -s /etc/php/7.2/mods-available/memcached.ini /etc/php/7.2/apache2/conf.d/
 RUN DEBIAN_FRONTEND=noninteractive pear install HTTP_Request2
 
 # Setup awscli
-RUN DEBIAN_FRONTEND=noninteractive apt-get -y install python python-pip git wget npm rinetd
+RUN DEBIAN_FRONTEND=noninteractive apt-get -y install python python-pip rsync git wget rinetd
 RUN DEBIAN_FRONTEND=noninteractive pip install awscli
+
+# Install NodeJS, Zotero web-library requires: node: ^8.16.0 (https://gist.github.com/remarkablemark/aacf14c29b3f01d6900d13137b21db3a#file-dockerfile-L5)
+RUN mkdir -p /usr/local/nvm
+ENV NVM_DIR /usr/local/nvm
+ENV NODE_VERSION 10.22.1
+RUN DEBIAN_FRONTEND=noninteractive wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.36.0/install.sh | bash
+RUN source $NVM_DIR/nvm.sh \
+    && nvm install $NODE_VERSION \
+    && nvm alias default $NODE_VERSION \
+    && nvm use default
+# add node and npm to path so the commands are available
+ENV NODE_PATH $NVM_DIR/v$NODE_VERSION/lib/node_modules
+ENV PATH $NVM_DIR/versions/node/v$NODE_VERSION/bin:$PATH
 
 # Setup Apache2
 RUN a2enmod rewrite
@@ -73,8 +87,10 @@ RUN echo "0.0.0.0		8082		minio		9000" >> /etc/rinetd.conf
 COPY entrypoint.sh /
 RUN chmod +x /entrypoint.sh
 VOLUME /var/www/zotero
-EXPOSE 80/tcp
+EXPOSE 80/TCP
 EXPOSE 81/TCP
 EXPOSE 82/TCP
+EXPOSE 8001/TCP
+
 ENTRYPOINT ["/entrypoint.sh"]
 

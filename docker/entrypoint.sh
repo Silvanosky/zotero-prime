@@ -17,7 +17,7 @@ export APACHE_LOG_DIR=/var/log/apache2
 # NPM
 cd /var/www/zotero/stream-server && npm install
 cd /var/www/zotero/tinymce-clean-server && npm install
-cd /var/www/zotero/web-library && npm install
+cd /var/www/zotero/web-library && npm install && npm rebuild node-sass
 
 # Start Stream server
 cd /var/www/zotero/stream-server && nodejs index.js &
